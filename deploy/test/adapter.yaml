@@ -1,0 +1,298 @@
+---
+# 00-namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: custom-metrics
+
+---
+# serviceAccount.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-falcon-metrics-adapter
+  namespace: "custom-metrics"
+  labels:
+    app: k8s-falcon-metrics-adapter
+---
+# apis.yaml
+
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: custommetrics.metrics.falcon
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: metrics.falcon
+  version: v1alpha1
+  scope: Namespaced
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: custommetrics
+    singular: custommetric
+    kind: CustomMetric
+    shortNames:
+      - fcm
+  #validation: #Turn on validation in future
+---
+# cluster-role.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-falcon-metrics-adapter
+  labels:
+    app: k8s-falcon-metrics-adapter
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - pods
+      - services
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-falcon-metrics-adapter:custom-metrics-reader
+  labels:
+    app: k8s-falcon-metrics-adapter
+rules:
+  - apiGroups:
+      - custom.metrics.k8s.io
+    resources: ["*"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-falcon-metrics-adapter:crd-metrics-reader
+  labels:
+    app: k8s-falcon-metrics-adapter
+rules:
+  - apiGroups:
+      - metrics.falcon
+    resources:
+      - "custommetrics"
+    verbs:
+      - list
+      - get
+      - watch
+
+---
+# cluster-role-binding.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-falcon-metrics-adapter:system:auth-delegator
+  namespace: kube-system
+  labels:
+    app: k8s-falcon-metrics-adapter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - name: k8s-falcon-metrics-adapter
+    namespace: "custom-metrics"
+    kind: ServiceAccount
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-falcon-metrics-adapter
+  labels:
+    app: k8s-falcon-metrics-adapter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-falcon-metrics-adapter
+subjects:
+  - name: k8s-falcon-metrics-adapter
+    namespace: "custom-metrics"
+    kind: ServiceAccount
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-falcon-metrics-adapter:hpa-custom-metrics-reader
+  labels:
+    app: k8s-falcon-metrics-adapter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-falcon-metrics-adapter:custom-metrics-reader
+subjects:
+  - kind: ServiceAccount
+    name: horizontal-pod-autoscaler
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-falcon-metrics-adapter:crd-metrics-reader
+  labels:
+    app: k8s-falcon-metrics-adapter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-falcon-metrics-adapter:crd-metrics-reader
+subjects:
+  - name: k8s-falcon-metrics-adapter
+    namespace: "custom-metrics"
+    kind: ServiceAccount
+---
+# role-binding.yaml
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k8s-falcon-metrics-adapter:extension-apiserver-authentication-reader
+  labels:
+    app: k8s-falcon-metrics-adapter
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: k8s-falcon-metrics-adapter
+    namespace: "custom-metrics"
+
+---
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-falcon-metrics-adapter
+  namespace: "custom-metrics"
+  labels:
+    app: k8s-falcon-metrics-adapter
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: k8s-falcon-metrics-adapter
+---
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-falcon-metrics-adapter
+  namespace: "custom-metrics"
+  labels:
+    app: k8s-falcon-metrics-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-falcon-metrics-adapter
+  template:
+    metadata:
+      labels:
+        app: k8s-falcon-metrics-adapter
+    spec:
+      serviceAccountName: k8s-falcon-metrics-adapter
+      imagePullSecrets:
+        - name: registryCredentials
+      containers:
+        - name: k8s-falcon-metrics-adapter
+          image: "192.168.117.6/test/k8s-falcon-metrics-adapter:latest"
+          imagePullPolicy: Always # IfNotPresent
+          args:
+            - /adapter
+            - --secure-port=6443
+            - --logtostderr=true
+            - --v=2
+          ports:
+            - name: http
+              containerPort: 6443
+              protocol: TCP
+          env:
+            - name: FALCON_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: k8s-falcon-metrics-adapter
+                  key: url
+            - name: FALCON_API_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: k8s-falcon-metrics-adapter
+                  key: name
+            - name: FALCON_API_SIG
+              valueFrom:
+                secretKeyRef:
+                  name: k8s-falcon-metrics-adapter
+                  key: sig
+          volumeMounts:
+            - mountPath: /tmp
+              name: temp-vol
+          resources:
+            {}
+#        - name: k8s-falcon-metrics-adapter
+#          image: centos:6.8
+#          command:
+#            - top
+#            - '-b'
+#          ports:
+#            - name: http
+#              containerPort: 6443
+#              protocol: TCP
+#          volumeMounts:
+#            - mountPath: /tmp
+#              name: temp-vol
+#          resources:
+#            {}
+      volumes:
+        - name: temp-vol
+          emptyDir: {}
+
+---
+# api-service-registration.yaml
+apiVersion: apiregistration.k8s.io/v1beta1
+kind: APIService
+metadata:
+  name: v1beta1.custom.metrics.k8s.io
+spec:
+  service:
+    name: k8s-falcon-metrics-adapter
+    namespace: custom-metrics
+  group: custom.metrics.k8s.io
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app: k8s-falcon-metrics-adapter
+  name: k8s-falcon-metrics-adapter
+  namespace: custom-metrics
+type: Opaque
+data:
+  url: YXBpLm1vbml0b3IuaW5rZS5zcnY=
+  name: azhzLWZhbGNvbi1tZXRyaWNzLWFkYXB0ZXI=
+  sig: ZGVmYXVsdC10b2tlbi11c2VkLWluLXNlcnZlci1zaWRl

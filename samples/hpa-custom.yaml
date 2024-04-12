@@ -1,0 +1,28 @@
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: test-sample
+  namespace: custom-metrics-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: test-sample
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: cpu.busy
+        target:
+          type: AverageValue
+          averageValue: 30
+    - type: Pods
+      pods:
+        metric:
+          name: net.if.in.bytes-iface-equal-eth0 # 对应custom metric的metadata.name
+        target:
+          type: AverageValue
+          averageValue: 52428800 # 5M

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: custom-metrics-test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-sample
+  namespace: custom-metrics-test
+spec:
+  selector:
+    matchLabels:
+      app: test-sample
+  template:
+    metadata:
+      labels:
+        app: test-sample
+    spec:
+      containers:
+        - name: test-sample
+          image: jsturtevant/metric-rps-example
+          command:
+            - top
+            - '-b'
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: test-sample
+  namespace: custom-metrics-test
+spec:
+  selector:
+    app: test-sample
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer

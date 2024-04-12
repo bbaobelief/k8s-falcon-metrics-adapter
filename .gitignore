@@ -1,0 +1,13 @@
+#apiserver local configuration
+apiserver.local.config
+
+#build output
+/adapter
+_output/
+
+# Logs
+logs
+*.log
+
+# vendor
+vendor

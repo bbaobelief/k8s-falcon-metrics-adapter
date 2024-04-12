@@ -1,0 +1,24 @@
+---
+# cpu.busy
+apiVersion: metrics.falcon/v1alpha1
+kind: CustomMetric
+metadata:
+  name: cpu.busy
+  namespace: custom-metrics-test
+spec:
+  metric:
+    counter: cpu.busy
+---
+# net.if.in.bytes/iface=eth0
+# k8s hpa只支持数字字母.-
+# 目前适配了/和=字符转义
+# net.if.in.bytes-iface-equal-eth0 会转义为net.if.in.bytes/iface=eth0
+apiVersion: metrics.falcon/v1alpha1
+kind: CustomMetric
+metadata:
+  name: net.if.in.bytes-iface-equal-eth0
+  namespace: custom-metrics-test
+spec:
+  metric:
+    counter: net.if.in.bytes/iface=eth0
+    # endpoint: xxx

@@ -1,0 +1,9 @@
+apiVersion: skaffold/v2beta13
+kind: Config
+build:
+  artifacts:
+    - image: 192.168.117.6/test/k8s-falcon-metrics-adapter
+deploy:
+  kubectl:
+    manifests:
+      - adapter
